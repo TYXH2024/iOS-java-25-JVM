@@ -21,34 +21,22 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      # 使用仓库已有的 openjdk-25-clone 作为源码
-      - name: Use existing openjdk-25-clone
+      - name: Fix TARGET triple
         run: |
-          if [ ! -d "openjdk-25-clone" ]; then
-            echo "ERROR: openjdk-25-clone not found in repository"
-            exit 1
-          fi
-          rm -rf openjdk-25
-          cp -r openjdk-25-clone openjdk-25
+          sed -i '' 's/export TARGET=aarch64-apple-ios/export TARGET=aarch64-apple-darwin/' \
+            angelauramc-openjdk-build/1_ci_build_arch_aarch64.sh
 
-      # 禁用 5_clonejdk.sh 中的 git clone
-      - name: Disable git clone in build script
-        run: |
-          sed -i '' 's/git clone/echo "Skipping git clone"/g' angelauramc-openjdk-build/5_clonejdk.sh
-
-      # 修复 Boot JDK 路径
-      - name: Fix Boot JDK path
+      - name: Fix Boot JDK path in 6_buildjdk.sh
         run: |
           BOOT_JDK=$(/usr/libexec/java_home -v 24)
           sed -i '' "s|--with-boot-jdk=\$(/usr/libexec/java_home -v \$TARGET_VERSION)|--with-boot-jdk=${BOOT_JDK}|g" \
             angelauramc-openjdk-build/6_buildjdk.sh
 
-      - name: Apply icache patch
+      # 关键修复：移除自动添加的 -mmacosx-version-min 标志（与 iOS 冲突）
+      - name: Remove conflicting macOS version flags
         run: |
-          # 直接运行项目自带的 patch_icache.sh（需修正路径）
-          sed -i '' 's|/tmp/openjdk-25-ios|openjdk-25|g' patch_icache.sh
-          chmod +x patch_icache.sh
-          ./patch_icache.sh
+          # 在 6_buildjdk.sh 中查找并删除包含 -mmacosx-version-min 的行
+          sed -i '' '/-mmacosx-version-min/d' angelauramc-openjdk-build/6_buildjdk.sh
 
       - name: Create dummy patches directory
         run: mkdir -p angelauramc-openjdk-build/patches/jre_25/ios
@@ -59,7 +47,6 @@ jobs:
           export BUILD_IOS=1
           export TARGET_VERSION=25
           export TOO_MANY_CORES=1
-          # 注意：保持原始的 TARGET=aarch64-apple-ios，因为 openjdk-25-clone 已支持
           ./1_ci_build_arch_aarch64.sh
 
       - name: Collect artifacts
