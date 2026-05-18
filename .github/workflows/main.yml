@@ -21,31 +21,24 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      # 如果存在 openjdk-25-clone，则使用它作为源码（已包含 iOS 修改）
       - name: Prepare source code
         run: |
           if [ -d "openjdk-25-clone" ]; then
-            echo "Using existing openjdk-25-clone as source"
             rm -rf openjdk-25
             cp -r openjdk-25-clone openjdk-25
           fi
 
-      # 让 configure 识别 aarch64-apple-ios
       - name: Patch platform.m4 to support ios
         run: |
           PLATFORM_M4="openjdk-25/make/autoconf/platform.m4"
           if [ -f "$PLATFORM_M4" ]; then
-            # 在 macosx 分支附近添加 ios 支持
             sed -i '' '/\*darwin\*)/a\
-    *ios*)\
-      VAR_OS=macosx\
-      VAR_OS_TYPE=unix\
-      ;;
-' "$PLATFORM_M4"
-            echo "Patched platform.m4 to recognize ios"
+        *ios*)\
+          VAR_OS=macosx\
+          VAR_OS_TYPE=unix\
+          ;;' "$PLATFORM_M4"
           fi
 
-      # 修正 icache
       - name: Apply icache fix
         run: |
           ICACHE_FILE="openjdk-25/src/hotspot/os_cpu/bsd_aarch64/icache_bsd_aarch64.hpp"
@@ -53,7 +46,6 @@ jobs:
             sed -i '' 's/__clear_cache(/__builtin___clear_cache(/g' "$ICACHE_FILE"
           fi
 
-      # 修复 Boot JDK 路径（使用 JDK 24）
       - name: Fix Boot JDK path
         run: |
           BOOT_JDK=$(/usr/libexec/java_home -v 24)
@@ -69,7 +61,6 @@ jobs:
           export BUILD_IOS=1
           export TARGET_VERSION=25
           export TOO_MANY_CORES=1
-          # 不修改 TARGET triple，保持 aarch64-apple-ios
           ./1_ci_build_arch_aarch64.sh
 
       - name: Collect artifacts
