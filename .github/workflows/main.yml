@@ -28,16 +28,24 @@ jobs:
             cp -r openjdk-25-clone openjdk-25
           fi
 
-      - name: Patch platform.m4 to support ios
+      - name: Create patch script for platform.m4
         run: |
+          cat > add_ios_support.sh << 'EOF'
+          #!/bin/bash
           PLATFORM_M4="openjdk-25/make/autoconf/platform.m4"
           if [ -f "$PLATFORM_M4" ]; then
+            # 在 darwin 分支后插入 ios 分支
             sed -i '' '/\*darwin\*)/a\
-        *ios*)\
-          VAR_OS=macosx\
-          VAR_OS_TYPE=unix\
-          ;;' "$PLATFORM_M4"
+          *ios*)\
+            VAR_OS=macosx\
+            VAR_OS_TYPE=unix\
+            ;;' "$PLATFORM_M4"
           fi
+          EOF
+          chmod +x add_ios_support.sh
+
+      - name: Apply platform.m4 patch
+        run: ./add_ios_support.sh
 
       - name: Apply icache fix
         run: |
