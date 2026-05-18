@@ -26,17 +26,35 @@ jobs:
           sed -i '' 's/export TARGET=aarch64-apple-ios/export TARGET=aarch64-apple-darwin/' \
             angelauramc-openjdk-build/1_ci_build_arch_aarch64.sh
 
-      - name: Fix Boot JDK path in 6_buildjdk.sh
+      - name: Fix Boot JDK path
         run: |
           BOOT_JDK=$(/usr/libexec/java_home -v 24)
           sed -i '' "s|--with-boot-jdk=\$(/usr/libexec/java_home -v \$TARGET_VERSION)|--with-boot-jdk=${BOOT_JDK}|g" \
             angelauramc-openjdk-build/6_buildjdk.sh
 
-      # 关键修复：移除自动添加的 -mmacosx-version-min 标志（与 iOS 冲突）
-      - name: Remove conflicting macOS version flags
+      # 关键：创建过滤器包装器，移除 -mmacosx-version-min
+      - name: Create compiler wrapper to filter conflicting flags
         run: |
-          # 在 6_buildjdk.sh 中查找并删除包含 -mmacosx-version-min 的行
-          sed -i '' '/-mmacosx-version-min/d' angelauramc-openjdk-build/6_buildjdk.sh
+          cat > /tmp/filter_clang.sh << 'FILTER_EOF'
+          #!/bin/bash
+          filtered_args=()
+          for arg in "$@"; do
+            case "$arg" in
+              -mmacosx-version-min*) ;;
+              *) filtered_args+=("$arg") ;;
+            esac
+          done
+          exec /usr/bin/xcrun --sdk iphoneos clang -arch arm64 "${filtered_args[@]}"
+          FILTER_EOF
+          chmod +x /tmp/filter_clang.sh
+          
+          # 覆盖原有的包装脚本
+          cat > angelauramc-openjdk-build/ios-arm64-clang << 'WRAPPER_EOF'
+          #!/bin/bash
+          exec /tmp/filter_clang.sh "$@"
+          WRAPPER_EOF
+          cp angelauramc-openjdk-build/ios-arm64-clang angelauramc-openjdk-build/ios-arm64-clang++
+          chmod +x angelauramc-openjdk-build/ios-arm64-clang angelauramc-openjdk-build/ios-arm64-clang++
 
       - name: Create dummy patches directory
         run: mkdir -p angelauramc-openjdk-build/patches/jre_25/ios
