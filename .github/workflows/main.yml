@@ -32,29 +32,15 @@ jobs:
           sed -i '' "s|--with-boot-jdk=\$(/usr/libexec/java_home -v \$TARGET_VERSION)|--with-boot-jdk=${BOOT_JDK}|g" \
             angelauramc-openjdk-build/6_buildjdk.sh
 
-      # 关键：创建过滤器包装器，移除 -mmacosx-version-min
-      - name: Create compiler wrapper to filter conflicting flags
+      - name: Remove problematic macOS-specific source files
         run: |
-          cat > /tmp/filter_clang.sh << 'FILTER_EOF'
-          #!/bin/bash
-          filtered_args=()
-          for arg in "$@"; do
-            case "$arg" in
-              -mmacosx-version-min*) ;;
-              *) filtered_args+=("$arg") ;;
-            esac
-          done
-          exec /usr/bin/xcrun --sdk iphoneos clang -arch arm64 "${filtered_args[@]}"
-          FILTER_EOF
-          chmod +x /tmp/filter_clang.sh
-          
-          # 覆盖原有的包装脚本
-          cat > angelauramc-openjdk-build/ios-arm64-clang << 'WRAPPER_EOF'
-          #!/bin/bash
-          exec /tmp/filter_clang.sh "$@"
-          WRAPPER_EOF
-          cp angelauramc-openjdk-build/ios-arm64-clang angelauramc-openjdk-build/ios-arm64-clang++
-          chmod +x angelauramc-openjdk-build/ios-arm64-clang angelauramc-openjdk-build/ios-arm64-clang++
+          # 删除导致编译错误的 macOS 专用文件
+          rm -f openjdk-25/src/hotspot/os/bsd/memMapPrinter_macosx.cpp
+          # 禁用 jdk.hotspot.agent 模块（因为它依赖 mach 接口，iOS 不支持）
+          rm -rf openjdk-25/src/jdk.hotspot.agent
+          # 删除其他可能引用 mach 的文件
+          find openjdk-25 -name "*.defs" -delete
+          find openjdk-25 -name "*_macosx*" -type f -delete
 
       - name: Create dummy patches directory
         run: mkdir -p angelauramc-openjdk-build/patches/jre_25/ios
