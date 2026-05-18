@@ -12,7 +12,6 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      # 使用 JDK 24 作为 Boot JDK（满足 OpenJDK 25 构建要求）
       - name: Set up Boot JDK 24
         uses: actions/setup-java@v4
         with:
@@ -22,14 +21,40 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      # 修复 TARGET triple
-      - name: Fix TARGET triple
+      # 如果存在 openjdk-25-clone，则使用它作为源码（已包含 iOS 修改）
+      - name: Prepare source code
         run: |
-          sed -i '' 's/export TARGET=aarch64-apple-ios/export TARGET=aarch64-apple-darwin/' \
-            angelauramc-openjdk-build/1_ci_build_arch_aarch64.sh
+          if [ -d "openjdk-25-clone" ]; then
+            echo "Using existing openjdk-25-clone as source"
+            rm -rf openjdk-25
+            cp -r openjdk-25-clone openjdk-25
+          fi
 
-      # 硬编码 Boot JDK 路径（使用 JDK 24）
-      - name: Fix Boot JDK path in 6_buildjdk.sh
+      # 让 configure 识别 aarch64-apple-ios
+      - name: Patch platform.m4 to support ios
+        run: |
+          PLATFORM_M4="openjdk-25/make/autoconf/platform.m4"
+          if [ -f "$PLATFORM_M4" ]; then
+            # 在 macosx 分支附近添加 ios 支持
+            sed -i '' '/\*darwin\*)/a\
+    *ios*)\
+      VAR_OS=macosx\
+      VAR_OS_TYPE=unix\
+      ;;
+' "$PLATFORM_M4"
+            echo "Patched platform.m4 to recognize ios"
+          fi
+
+      # 修正 icache
+      - name: Apply icache fix
+        run: |
+          ICACHE_FILE="openjdk-25/src/hotspot/os_cpu/bsd_aarch64/icache_bsd_aarch64.hpp"
+          if [ -f "$ICACHE_FILE" ]; then
+            sed -i '' 's/__clear_cache(/__builtin___clear_cache(/g' "$ICACHE_FILE"
+          fi
+
+      # 修复 Boot JDK 路径（使用 JDK 24）
+      - name: Fix Boot JDK path
         run: |
           BOOT_JDK=$(/usr/libexec/java_home -v 24)
           sed -i '' "s|--with-boot-jdk=\$(/usr/libexec/java_home -v \$TARGET_VERSION)|--with-boot-jdk=${BOOT_JDK}|g" \
@@ -44,6 +69,7 @@ jobs:
           export BUILD_IOS=1
           export TARGET_VERSION=25
           export TOO_MANY_CORES=1
+          # 不修改 TARGET triple，保持 aarch64-apple-ios
           ./1_ci_build_arch_aarch64.sh
 
       - name: Collect artifacts
