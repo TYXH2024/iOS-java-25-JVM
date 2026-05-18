@@ -1,4 +1,4 @@
-name: Build OpenJDK 25 for iOS (GitHub Actions)
+name: Build OpenJDK 25 for iOS
 
 on:
   workflow_dispatch:
@@ -12,32 +12,33 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up Boot JDK 21
+      # 使用 JDK 24 作为 Boot JDK（满足 OpenJDK 25 构建要求）
+      - name: Set up Boot JDK 24
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '24'
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
-      # 关键修复：configure 不认 aarch64-apple-ios，改用 darwin
+      # 修复 TARGET triple
       - name: Fix TARGET triple
         run: |
           sed -i '' 's/export TARGET=aarch64-apple-ios/export TARGET=aarch64-apple-darwin/' \
             angelauramc-openjdk-build/1_ci_build_arch_aarch64.sh
 
-      # Boot JDK 路径硬编码
+      # 硬编码 Boot JDK 路径（使用 JDK 24）
       - name: Fix Boot JDK path in 6_buildjdk.sh
         run: |
-          BOOT_JDK=$(/usr/libexec/java_home -v 21)
+          BOOT_JDK=$(/usr/libexec/java_home -v 24)
           sed -i '' "s|--with-boot-jdk=\$(/usr/libexec/java_home -v \$TARGET_VERSION)|--with-boot-jdk=${BOOT_JDK}|g" \
             angelauramc-openjdk-build/6_buildjdk.sh
 
-      - name: Ensure patches/ios directory exists (avoid git apply errors)
+      - name: Create dummy patches directory
         run: mkdir -p angelauramc-openjdk-build/patches/jre_25/ios
 
-      - name: Build OpenJDK 25 for iOS (aarch64)
+      - name: Build OpenJDK 25 for iOS
         run: |
           cd angelauramc-openjdk-build
           export BUILD_IOS=1
